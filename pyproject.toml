@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "temporal-graph-rag"
+version = "0.1.0"
+description = "Temporal Graph RAG engine with hybrid retrieval and temporal reasoning."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Edward Schechter", email = "schechtereddie@gmail.com" }
+]
+keywords = ["rag", "temporal", "graph", "retrieval", "neo4j", "qdrant"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+  "fastapi>=0.109",
+  "pydantic>=2.6",
+  "uvicorn>=0.27",
+  "neo4j>=5.18",
+  "qdrant-client>=1.8",
+  "rank-bm25>=0.2",
+  "numpy>=1.26",
+  "python-dotenv>=1.0",
+  "httpx>=0.26",
+  "opentelemetry-api>=1.22",
+]
+
+[project.optional-dependencies]
+bench = [
+  "matplotlib>=3.8",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Schechter-Edward/temporal-graph-rag"
+Repository = "https://github.com/Schechter-Edward/temporal-graph-rag"
+Issues = "https://github.com/Schechter-Edward/temporal-graph-rag/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

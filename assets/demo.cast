@@ -1,0 +1,3 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1769694432, "env": {"SHELL": "/bin/bash", "TERM": "linux"}}
+[0.012802, "o", "Traceback (most recent call last):\r\n  File \"/home/schech/temp/temporal-graph-rag/demo/cli_demo.py\", line 6, in <module>\r\n"]
+[0.013212, "o", "    from temporal_graph_rag import TemporalGraphRAG\r\nModuleNotFoundError: No module named 'temporal_graph_rag'\r\n"]

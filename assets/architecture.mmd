@@ -1,0 +1,12 @@
+graph TD
+  A[Temporal Query] --> B[Query Decomposer]
+  B --> C[Temporal Context]
+  C --> D[Parallel Retrieval]
+  D --> E[Graph DB: Neo4j]
+  D --> F[Vector Search: Qdrant]
+  D --> G[Sparse BM25]
+  E --> H["RRF Fusion (time-weighted)"]
+  F --> H
+  G --> H
+  H --> I[Temporal Consistency Checker]
+  I --> J[Response Synthesis]
