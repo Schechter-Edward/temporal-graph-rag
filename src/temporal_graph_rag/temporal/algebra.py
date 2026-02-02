@@ -9,6 +9,7 @@ AllenRelation = Literal[
     "before",
     "after",
     "meets",
+    "met_by",
     "overlaps",
     "during",
     "starts",
@@ -36,6 +37,8 @@ def relate(a: Interval, b: Interval) -> AllenRelation:
         return "after"
     if a.end == b.start:
         return "meets"
+    if a.start == b.end:
+        return "met_by"
     if a.start < b.start < a.end < b.end:
         return "overlaps"
     if b.start <= a.start and a.end <= b.end:

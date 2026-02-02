@@ -49,6 +49,9 @@ Homepage = "https://github.com/Schechter-Edward/temporal-graph-rag"
 Repository = "https://github.com/Schechter-Edward/temporal-graph-rag"
 Issues = "https://github.com/Schechter-Edward/temporal-graph-rag/issues"
 
+[project.scripts]
+temporal-graph-rag = "temporal_graph_rag.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

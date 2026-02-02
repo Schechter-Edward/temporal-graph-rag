@@ -28,8 +28,8 @@ def main() -> None:
     print("\nSources:")
     for source in result.sources:
         print(
-            f"- {source.content} | source={source.source} "
-            f"valid={source.valid_from}..{source.valid_to} score={source.score:.3f}"
+            f"- {source.content} | sources={','.join(source.sources)} "
+            f"valid={source.valid_from}..{source.valid_to} fused_score={source.fused_score:.3f}"
         )
 
 

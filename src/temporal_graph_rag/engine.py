@@ -1,36 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, List, Optional
+import calendar
 import re
 import math
 
-
-@dataclass
-class TemporalContext:
-    reference_time: datetime
-    operators: List[str]
-    time_start: Optional[datetime]
-    time_end: Optional[datetime]
-    granularity: str
-
-
-@dataclass
-class RetrievalResult:
-    doc_id: str
-    content: str
-    source: str
-    score: float
-    valid_from: Optional[datetime]
-    valid_to: Optional[datetime]
-
-
-@dataclass
-class QueryResponse:
-    answer: str
-    sources: List[RetrievalResult]
-    temporal_context: TemporalContext
+from temporal_graph_rag.retrievers import BM25Retriever, InMemoryDenseRetriever, InMemoryGraphRetriever, Retriever
+from temporal_graph_rag.types import FusedRetrievalResult, QueryResponse, RetrievalResult, TemporalContext
 
 
 class TemporalGraphRAG:
@@ -39,8 +16,12 @@ class TemporalGraphRAG:
     Replace in-memory stores with Neo4j/Qdrant/Elasticsearch in production.
     """
 
-    def __init__(self) -> None:
-        self._docs = [
+    def __init__(
+        self,
+        docs: Optional[List[dict]] = None,
+        retrievers: Optional[List[Retriever]] = None,
+    ) -> None:
+        self._docs = docs or [
             {
                 "id": "doc-1",
                 "content": "Alice led Project Orion from 2023-01 to 2024-02.",
@@ -60,20 +41,28 @@ class TemporalGraphRAG:
                 "valid_to": datetime(2024, 3, 31),
             },
         ]
+        self._retrievers = retrievers or [
+            InMemoryGraphRetriever(self._docs),
+            InMemoryDenseRetriever(self._docs),
+            BM25Retriever(self._docs),
+        ]
 
     def query(self, query: str, reference_time: Optional[datetime] = None) -> QueryResponse:
         ref_time = reference_time or datetime.utcnow()
         ctx = self._parse_temporal_context(query, ref_time)
 
-        graph_results = self._graph_retrieve(query, ctx)
-        dense_results = self._dense_retrieve(query, ctx)
-        sparse_results = self._sparse_retrieve(query, ctx)
-
-        fused = self._temporal_rrf([graph_results, dense_results, sparse_results], ctx)
+        results_lists = [retriever.retrieve(query, ctx) for retriever in self._retrievers]
+        fused = self._temporal_rrf(results_lists, ctx)
         top = fused[:5]
 
         answer = self._synthesize(query, top, ctx)
         return QueryResponse(answer=answer, sources=top, temporal_context=ctx)
+
+    def close(self) -> None:
+        for retriever in self._retrievers:
+            close = getattr(retriever, "close", None)
+            if callable(close):
+                close()
 
     def _parse_temporal_context(self, query: str, ref_time: datetime) -> TemporalContext:
         operators: List[str] = []
@@ -98,7 +87,10 @@ class TemporalGraphRAG:
             time_end = datetime(year, 12, 31)
             granularity = "year"
 
-        month_match = re.search(r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(19|20)\d{2}", lower)
+        month_match = re.search(
+            r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+((19|20)\d{2})",
+            lower,
+        )
         if month_match:
             month_map = {
                 "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
@@ -106,8 +98,9 @@ class TemporalGraphRAG:
             }
             month = month_map[month_match.group(1)[:3]]
             year = int(month_match.group(2))
+            month_end = calendar.monthrange(year, month)[1]
             time_start = datetime(year, month, 1)
-            time_end = datetime(year, month, 28)
+            time_end = datetime(year, month, month_end)
             granularity = "month"
 
         return TemporalContext(
@@ -118,49 +111,14 @@ class TemporalGraphRAG:
             granularity=granularity,
         )
 
-    def _graph_retrieve(self, query: str, ctx: TemporalContext) -> List[RetrievalResult]:
-        # Placeholder: treat any doc mentioning query tokens as graph hits.
-        tokens = set(query.lower().split())
-        results: List[RetrievalResult] = []
-        for doc in self._docs:
-            if tokens & set(doc["content"].lower().split()):
-                score = 0.9
-                results.append(self._wrap(doc, "graph", score))
-        return results
-
-    def _dense_retrieve(self, query: str, ctx: TemporalContext) -> List[RetrievalResult]:
-        # Placeholder for vector retrieval.
-        results: List[RetrievalResult] = []
-        for i, doc in enumerate(self._docs):
-            score = 0.6 - (i * 0.05)
-            results.append(self._wrap(doc, "dense", score))
-        return results
-
-    def _sparse_retrieve(self, query: str, ctx: TemporalContext) -> List[RetrievalResult]:
-        # Placeholder for BM25.
-        results: List[RetrievalResult] = []
-        for i, doc in enumerate(self._docs[::-1]):
-            score = 0.5 - (i * 0.05)
-            results.append(self._wrap(doc, "sparse", score))
-        return results
-
-    def _wrap(self, doc: dict, source: str, score: float) -> RetrievalResult:
-        return RetrievalResult(
-            doc_id=doc["id"],
-            content=doc["content"],
-            source=source,
-            score=score,
-            valid_from=doc["valid_from"],
-            valid_to=doc["valid_to"],
-        )
-
     def _temporal_rrf(
         self,
         results_lists: Iterable[List[RetrievalResult]],
         ctx: TemporalContext,
         k: int = 60,
-    ) -> List[RetrievalResult]:
+    ) -> List[FusedRetrievalResult]:
         scores: dict[str, float] = {}
+        source_scores: dict[str, dict[str, float]] = {}
         doc_map: dict[str, RetrievalResult] = {}
 
         for results in results_lists:
@@ -171,20 +129,49 @@ class TemporalGraphRAG:
                 final = rrf * temporal_boost * source_weight
 
                 scores[result.doc_id] = scores.get(result.doc_id, 0.0) + final
+                if result.doc_id not in source_scores:
+                    source_scores[result.doc_id] = {}
+                source_scores[result.doc_id][result.source] = (
+                    source_scores[result.doc_id].get(result.source, 0.0) + final
+                )
                 doc_map[result.doc_id] = result
 
         sorted_ids = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        return [doc_map[doc_id] for doc_id, _ in sorted_ids]
+        fused_results: List[FusedRetrievalResult] = []
+        for doc_id, fused_score in sorted_ids:
+            base = doc_map[doc_id]
+            per_source = source_scores.get(doc_id, {})
+            fused_results.append(
+                FusedRetrievalResult(
+                    doc_id=base.doc_id,
+                    content=base.content,
+                    sources=sorted(per_source.keys()),
+                    fused_score=fused_score,
+                    source_scores=per_source,
+                    valid_from=base.valid_from,
+                    valid_to=base.valid_to,
+                )
+            )
+        return fused_results
 
     def _temporal_boost(self, result: RetrievalResult, ctx: TemporalContext) -> float:
+        """Soft filter: penalize out-of-window results without dropping them."""
         if result.valid_from is None:
             return 1.0
         ref = ctx.reference_time
         days = abs((ref - result.valid_from).days)
-        return 0.5 + math.exp(-days / 365.0)
+        recency_boost = 0.5 + math.exp(-days / 365.0)
+
+        window_factor = 1.0
+        if ctx.time_start and ctx.time_end:
+            valid_to = result.valid_to or datetime.max
+            overlaps = result.valid_from <= ctx.time_end and valid_to >= ctx.time_start
+            window_factor = 1.2 if overlaps else 0.35
+
+        return recency_boost * window_factor
 
     def _synthesize(
-        self, query: str, results: List[RetrievalResult], ctx: TemporalContext
+        self, query: str, results: List[FusedRetrievalResult], ctx: TemporalContext
     ) -> str:
         if not results:
             return "No relevant temporal facts found."
@@ -195,6 +182,6 @@ class TemporalGraphRAG:
         ]
         for res in results[:3]:
             lines.append(
-                f"- {res.content} (source={res.source}, valid={res.valid_from}..{res.valid_to})"
+                f"- {res.content} (sources={','.join(res.sources)}, valid={res.valid_from}..{res.valid_to})"
             )
         return "\n".join(lines)

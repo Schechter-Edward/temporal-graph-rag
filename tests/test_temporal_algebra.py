@@ -18,6 +18,12 @@ def test_meets():
     assert relate(a, b) == "meets"
 
 
+def test_met_by():
+    a = Interval(dt(2024, 1, 2), dt(2024, 1, 3))
+    b = Interval(dt(2024, 1, 1), dt(2024, 1, 2))
+    assert relate(a, b) == "met_by"
+
+
 def test_overlaps():
     a = Interval(dt(2024, 1, 1), dt(2024, 1, 5))
     b = Interval(dt(2024, 1, 4), dt(2024, 1, 10))

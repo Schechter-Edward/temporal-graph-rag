@@ -1,0 +1,28 @@
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence,
+# @Schechter-Edward will be requested for review when someone opens a
+# pull request.
+*       @Schechter-Edward
+
+# Order is important; the last matching pattern takes the most
+# precedence. When someone opens a pull request that only
+# modifies docs, only @Schechter-Edward will be requested for a
+# review. Otherwise, the owners set in README.md and
+# LICENSE will be requested for
+# review.
+README.md       @Schechter-Edward
+LICENSE         @Schechter-Edward
+
+# These owners will be requested for review when someone modifies
+# files that are in the src/ directory or any of its subfolders.
+src/            @Schechter-Edward
+
+# Tests
+tests/          @Schechter-Edward
+
+# Documentation
+docs/           @Schechter-Edward
+*.md            @Schechter-Edward
+
+# CI/CD
+.github/        @Schechter-Edward

@@ -1,11 +1,23 @@
 from datetime import datetime
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from temporal_graph_rag import TemporalGraphRAG
+from temporal_graph_rag.api.ui import UI_HTML
 
-app = FastAPI(title="Temporal Graph RAG", version="0.1.0")
-engine = TemporalGraphRAG()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    engine = TemporalGraphRAG()
+    app.state.engine = engine
+    try:
+        yield
+    finally:
+        engine.close()
+
+
+app = FastAPI(title="Temporal Graph RAG", version="0.1.0", lifespan=lifespan)
 
 
 class QueryRequest(BaseModel):
@@ -16,8 +28,9 @@ class QueryRequest(BaseModel):
 class SourceItem(BaseModel):
     doc_id: str
     content: str
-    source: str
-    score: float
+    sources: list[str]
+    fused_score: float
+    source_scores: dict[str, float]
     valid_from: datetime | None
     valid_to: datetime | None
 
@@ -28,15 +41,27 @@ class QueryResponse(BaseModel):
     temporal_context: dict
 
 
+@app.get("/", response_class=HTMLResponse)
+def home() -> HTMLResponse:
+    return HTMLResponse(UI_HTML)
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest) -> QueryResponse:
+    engine = app.state.engine
     res = engine.query(req.query, req.reference_time)
     sources = [
         SourceItem(
             doc_id=s.doc_id,
             content=s.content,
-            source=s.source,
-            score=s.score,
+            sources=s.sources,
+            fused_score=s.fused_score,
+            source_scores=s.source_scores,
             valid_from=s.valid_from,
             valid_to=s.valid_to,
         )
